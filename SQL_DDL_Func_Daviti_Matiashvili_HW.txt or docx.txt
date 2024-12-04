@@ -1,0 +1,124 @@
+Question 1-What operations do the following functions perform: film_in_stock, film_not_in_stock, inventory_in_stock, get_customer_balance, inventory_held_by_customer, rewards_report, last_day? You can find these functions in dvd_rental database.
+
+answer: 
+1-film_in_stock takes 2 in-arguments and 1 out argument.
+it returns all inventory ids of the films that are at store and are in stock
+2-film_not_in_stock functions is opposite of film_in_stock function.it also takes 3 arguments and returns all inventory ids
+of the films at some store which are not in stock.
+3-inventory_in_stock-this function takes inventory_id and returns
+true/false based on if it is in inventory or not. and  for checking
+it uses some logic for that.
+4-inventory_held_by_customer.it returns the customer_id of a customer who took one particular inventory and yet not turned it back. but if item is in inventory it will return Null value because select into statement will not find any result so v_customer_id will be Null and the function returns
+v_customer_ids value which will be Null.
+5-get_customer_balance this function is bit confusing.But main idea is that it calculates customer balance based on its id and date. for calculation it implements some logic and calculates it based on that.
+6- rewards_report this function has two parameters-min_monthly_purchases integer, min_dollar_amount_purchased numeric. It returns all information of customer who spent more then "min_dollar_amount_purchased" and made at least "min_monthly_purchases" in that period time.
+7-last_day this function calculates the last they of a function. it takes one parameter and checks if the month is December than it increments year with one
+and substracts one day of the new years first day of the first month. if it is not December than it just increments month by 1 again substracts 1 day of the next months first day.also it always returns same result for the same input and if we pass null as a parameter it will return null.
+
+
+
+
+Question 2- 
+CREATE OR REPLACE FUNCTION public.rewards_report(min_monthly_purchases INTEGER, min_dollar_amount_purchased NUMERIC)
+RETURNS SETOF customer
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $function$
+DECLARE
+    last_month_start DATE;
+    last_month_end DATE;
+    rr RECORD;
+    tmpSQL TEXT;
+BEGIN
+    IF min_monthly_purchases <= 0 THEN
+        RAISE EXCEPTION 'Minimum monthly purchases parameter must be > 0';
+    END IF;
+    IF min_dollar_amount_purchased <= 0.00 THEN
+        RAISE EXCEPTION 'Minimum monthly dollar amount purchased parameter must be > $0.00';
+    END IF;
+
+    last_month_start := DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month');    last_month_end := last_month_start + INTERVAL '1 month' - INTERVAL '1 day';
+    CREATE TEMP TABLE tmpCustomer (customer_id INTEGER NOT NULL PRIMARY KEY) ON COMMIT DROP;
+    tmpSQL := '
+        INSERT INTO tmpCustomer (customer_id)
+        SELECT p.customer_id
+        FROM payment AS p
+        WHERE p.payment_date BETWEEN ' || quote_literal(last_month_start) || ' AND ' || quote_literal(last_month_end) || '
+        GROUP BY p.customer_id
+        HAVING SUM(p.amount) > ' || min_dollar_amount_purchased || '
+        AND COUNT(*) > ' || min_monthly_purchases;
+
+    EXECUTE tmpSQL;
+    FOR rr IN 
+        SELECT c.*
+        FROM tmpCustomer AS t
+        JOIN customer AS c ON t.customer_id = c.customer_id
+    LOOP
+        RETURN NEXT rr;
+    END LOOP;
+
+    RETURN;
+END;
+$function$;
+
+I just only changed calculation of last_month_start. changed 3 month with 1 month and also while inserting data in tmpCustomer i changed group by clause by 
+p.customer_id and count(customer_id) with count(p.customer_id) just to make sure that there will be no ambiguous error.It still returns 0 row but maybe it is because there is no data in database.new(i changed the calculation of last_month_start and last_month_end and added  on commmit drop while creating temp table.
+
+
+Question 3-Is there any function that can potentially be removed from the dvd_rental codebase? If so, which one and why?
+
+answer: film_in_stock and film_not_in_stock function logically are the same. first one returns the films which are in stock and second returns the films which are not. So I think one of them will be still enough for database.because we  still can get films which are not in stock using films_in_stock function and vice versa.
+
+Question 4-The ‘get_customer_balance’ function describes the business requirements for calculating the client balance. Unfortunately, not all of them are implemented in this function. Try to change function using the requirements from the comments.
+
+answer- we just need to add query which calculates replacement cost:
+	
+		SELECT COALESCE(SUM(CASE 
+                           WHEN (rental.return_date - rental.rental_date) > (film.rental_duration * 2 * '1 day'::interval)
+                           THEN film.replacement_cost
+                           ELSE 0
+                        END), 0)
+    INTO v_replacement_costs
+    FROM rental, inventory, film
+    WHERE film.film_id = inventory.film_id
+      AND inventory.inventory_id = rental.inventory_id
+      AND rental.rental_date <= p_effective_date
+      AND rental.customer_id = p_customer_id;
+
+I think  logic is correct and after we add it into v_replacement_costs final formula will be-
+RETURN v_rentfees + v_overfees + v_replacement_costs - v_payments;
+
+
+Question 5-How do ‘group_concat’ and ‘_group_concat’ functions work? (database creation script might help) Where are they used?
+
+answer: _group_concat takes to text type parameters and if first one is null then it returns second parameter. if second one is null it returns first parameter and if none of them are it returns concatenates them together using "," between them.
+group_concat  is an aggregate function that concatenates strings from multiple rows into a single string, with a comma separating the values.
+
+where are they used?- they can be used when we want to get information of 1 particular column from the table. if we use group_concat function on that column
+we will get all the data for this column.
+
+
+Question 6-What does ‘last_updated’ function do? Where is it used?
+answer:it just changes last_updated field to current_timpestamp. I think it will be useful for this kind of situations when we want to check when was the last date that when some rows were modified.
+
+Question 7-What is tmpSQL variable for in ‘rewards_report’ function? Can this function be recreated without EXECUTE statement and dynamic SQL? Why?
+
+answer-tmpSQl is text type variable and we are using it to dynamically insert values into tmpCustomer table and also we are using it to drop that table. with EXECUTE command.
+Can this function be recreated without EXECUTE statement and dynamic SQL? Why?- I think it is possible we can just remove insert and just output the  information about customers which meet the specified conditions for every loop iteration.
+
+		code implementation-
+
+for rr in
+    select c.*
+    from customer c
+    where c.customer_id in (
+        select p.customer_id
+        from payment p
+        where date(p.payment_date) between last_month_start and last_month_end
+        group by p.customer_id
+        having sum(p.amount) > min_dollar_amount_purchased
+        and count(p.customer_id) > min_monthly_purchases
+    )
+loop
+    return next rr;
+end loop;
