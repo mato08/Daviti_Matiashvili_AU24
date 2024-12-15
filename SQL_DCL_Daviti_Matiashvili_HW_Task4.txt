@@ -1,8 +1,0 @@
-question 1-tables can have row security policies that restrict, on a per-user basis, which rows can be returned by normal queries or inserted, updated, or deleted by data modification commands.also we can use views for that. we can show only the columns that we need and not the whole table data and maybe proxy can be used in this situation too.
-
-question 2-user identification and user authentication are mostly the same. but I think the main difference is that in user identification stage we just know who the user is and in user authentication state this user has to prove that it's really him by writing password or using any other way.
-
-question 3-PostgreSQL supports a variety of authentication methods, including password authentication, certificate-based authentication, and external authentication via LDAP or Kerberos. By default, PostgreSQL requires users to authenticate using a password. I also found another authentication method in posgresql documentation:trust authentication,GSSAPI authentication,SSPI authentication,Ident authentication,Peer authentication,RADIUS authentication,Certificate authentication and PAM authentication.
-
-
-question 4-The benefit of proxy authentication is that it separates the concerns of authentication and authorization, making role-based access control (RBAC) easier to implement since the proxy handles the delegation of permissions and authority based on the initial user's identity.
