@@ -1,21 +1,7 @@
-
 --task 2
 
 --1)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM pg_roles 
-        WHERE rolname = 'rentaluser'
-    ) THEN
-        CREATE USER rentaluser WITH PASSWORD 'rentalpassword';
-    ELSE
-        RAISE NOTICE 'Role "rentaluser" already exists.';
-    END IF;
-END $$;
-
-
+create user rentaluser with password 'rentalpassword';
 grant connect on database dvdrental to rentaluser;
 
 
@@ -27,19 +13,7 @@ SELECT * FROM public.customer;
 RESET ROLE;
 
 --3)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM pg_roles 
-        WHERE rolname = 'rental'
-    ) THEN
-        CREATE role rental;
-    ELSE
-        RAISE NOTICE 'Role "rental" already exists.';
-    END IF;
-END $$;
-
+create user rental;
 grant rental to rentaluser;
 
 --4)
@@ -56,48 +30,31 @@ grant rental to rentaluser;
 grant insert on public.rental to rental;
 grant select on public.rental to rental;
 grant update on public.rental to rental;
-grant select on public.inventory  to rental;
-grant select on public.customer to rental;
-grant select on public.staff to rental;
 
-
-
+select * from public.inventory i 
+select * from public.staff s
+select * from public.rental r 
+order by r.rental_id desc;
 
 
 set role rental;
-INSERT INTO public.rental (rental_date, inventory_id, customer_id, return_date, staff_id, last_update)
-VALUES (
-    '2024-12-15', 
-    (SELECT inventory_id FROM public.inventory WHERE store_id = 1 LIMIT 1),
-    (SELECT customer_id FROM public.customer 
-     WHERE UPPER(email) = UPPER('datomatiashvili91@gmail.com') 
-       AND UPPER(first_name) = UPPER('daviti') 
-       AND UPPER(last_name) = UPPER('matiashvili')),
-    '2024-12-16', 
-    (SELECT staff_id FROM public.staff 
-     WHERE UPPER(first_name) = UPPER('mike') 
-       AND UPPER(last_name) = UPPER('hillyer')), 
-    CURRENT_DATE
-);
+insert into public.rental(rental_id,rental_date,inventory_id,customer_id,return_date,staff_id,last_update)
+		select 32310,'2017-02-03',1,2,'2017-02-04',1,current_date
+		returning *;
 reset role;
 
 set role rental;
 UPDATE public.rental
-SET return_date = '2024-12-17'
-WHERE rental_id = (
-    SELECT rental_id
-    FROM public.rental
-    WHERE inventory_id = (SELECT inventory_id FROM public.inventory WHERE store_id = 1 LIMIT 1)
-      AND customer_id = (SELECT customer_id FROM public.customer 
-                         WHERE UPPER(email) = UPPER('datomatiashvili91@gmail.com') 
-                           AND UPPER(first_name) = UPPER('daviti') 
-                           AND UPPER(last_name) = UPPER('matiashvili'))
-    LIMIT 1
-);
+SET return_date = '2017-02-05', staff_id = 2
+WHERE rental_id = 32310;
 reset role;
 
 
-
+/* I tried solving this problem withoud hardcodingIDs but for that i needed to grant select on inventory,staff and customer tables 
+to rental but since task description don't allow us to do that I think there is no other option other than what I did.
+also about rental_id i wrote rental_id 32310 because at first I left rental_id part in insert statement,because I thought since
+it is serial type and has auto increment we didn't need to specify its id in insert statement.but it gave me an error so thats
+why I specified new ID for this table. */
 
 
 --5)
@@ -133,64 +90,35 @@ begin
 end $$;
 
 
+
 -- task 3
-ALTER TABLE rental ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payment ENABLE ROW LEVEL SECURITY;
-
--- Create a policy for the rental table
-
-DO $$ 
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM pg_policies 
-        WHERE tablename = 'rental' AND policyname = 'rental_policy'
-    ) THEN
-        EXECUTE '
-            CREATE POLICY rental_policy 
-            ON rental 
-            FOR SELECT 
-            USING (
-                customer_id = (
-                    SELECT customer_id
-                    FROM public.customer
-                    WHERE UPPER(first_name) = UPPER(split_part(current_user, ''_'', 2))
-                    AND UPPER(last_name) = UPPER(split_part(current_user, ''_'', 3))
-                    LIMIT 1
-                )
-            )';
-    END IF;
-END $$;
-
--- Create a policy for the payment table
-DO $$ 
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM pg_policies 
-        WHERE tablename = 'payment' AND policyname = 'payment_policy'
-    ) THEN
-        EXECUTE '
-            CREATE POLICY payment_policy 
-            ON payment 
-            FOR SELECT 
-            USING (
-                customer_id = (
-                    SELECT customer_id
-                    FROM public.customer
-                    WHERE UPPER(first_name) = UPPER(split_part(current_user, ''_'', 2))
-                    AND UPPER(last_name) = UPPER(split_part(current_user, ''_'', 3))
-                    LIMIT 1
-                )
-            )';
-    END IF;
-END $$;
+do $$ 
+declare
+    customer record;
+    role_name text;
+begin
+    for customer in
+        select distinct c.first_name, c.last_name
+        from public.customer c
+        join public.payment p on c.customer_id = p.customer_id
+        join public.rental r on c.customer_id = r.customer_id
+        where p.amount is not null and r.rental_date is not null
+    loop
+        role_name := 'client_' || lower(customer.first_name) || '_' || lower(customer.last_name);
+        execute format('
+            create policy %s_rental_policy on public.rental
+            for select
+            using (customer_id = (select customer_id from public.customer where lower(first_name) || ''_'' || lower(last_name) = current_user));
+        ', role_name);
+        execute format('
+            create policy %s_payment_policy on public.payment
+            for select
+            using (customer_id = (select customer_id from public.customer where lower(first_name) || ''_'' || lower(last_name) = current_user));
+        ', role_name);
+    end loop;
+end $$;
 
 
-
-set role client_aaron_selby
-select * from public.payment p 
-reset role
 
 
 	

@@ -56,34 +56,3 @@ GRANT pg_stat_scan_tables TO pg_monitor;
 it also can do none of this that postgres can but it also grants the ability to do all the things that pg_read_all_settings,pg_read_all_stats and
 pg_stat_scan_tables can do since this role is created for monitoring.
 
-
-
-Table-Level Privileges:
-postgres-Complete unrestricted access to all tables
-Can CREATE, READ, UPDATE, DELETE on any table
-Can bypass Row-Level Security (RLS)
-Can modify table structures
-Can grant/revoke privileges on tables to other roles
-
-
-Most Other Roles:
-
-Typically have very limited or no direct table-level privileges
-Cannot create, modify, or delete tables by default
-Access is usually explicitly granted by a superuser
-
-pg_monitor:
-
-Read-only access to statistics and settings
-Can scan table statistics
-Cannot modify table data or structures
-
-
-
-Data & Password Encryption:
-
-Even database administrators can't see the original password,Each password is unique and cannot be reversed back to its original form
-
-Data Encryption:
-Only the postgres role has full power to access and potentially encrypt data,Other roles (like pg_monitor, pg_read_all_data) have very limited access
-They can read some data and can't modify or encrypt data themselves
