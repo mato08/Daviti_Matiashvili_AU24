@@ -59,7 +59,9 @@ grant update on public.rental to rental;
 grant select on public.inventory  to rental;
 grant select on public.customer to rental;
 grant select on public.staff to rental;
-GRANT USAGE, SELECT ON SEQUENCE public.rental_rental_id_seq TO rental;
+
+
+
 
 
 set role rental;
@@ -111,36 +113,29 @@ Error position: */
 
 	
 --6)
-DO $$
-DECLARE
-    customer RECORD;
-    role_name TEXT;
-BEGIN
-    -- Loop through each customer who has data in the payment and rental tables
-    FOR customer IN
-        SELECT DISTINCT c.first_name, c.last_name
-        FROM public.customer c
-        JOIN public.payment p ON c.customer_id = p.customer_id
-        JOIN public.rental r ON c.customer_id = r.customer_id
-        WHERE p.amount IS NOT NULL AND r.rental_date IS NOT NULL
-    LOOP
+do $$
+declare
+    customer record;
+    role_name text;
+begin
+    for customer in
+        select distinct c.first_name, c.last_name
+        from public.customer c
+        join public.payment p on c.customer_id = p.customer_id
+        join public.rental r on c.customer_id = r.customer_id
+        where p.amount is not null and r.rental_date is not null
+    loop
         role_name := 'client_' || lower(customer.first_name) || '_' || lower(customer.last_name);
-        
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
-            EXECUTE 'CREATE ROLE ' || quote_ident(role_name) || ' WITH NOLOGIN;';
-        END IF;
-        
-        EXECUTE 'GRANT SELECT ON public.rental TO ' || quote_ident(role_name) || ';';
-        EXECUTE 'GRANT SELECT ON public.payment TO ' || quote_ident(role_name) || ';';
-    END LOOP;
-END $$;
-
+        if not exists (select 1 from pg_roles where rolname = role_name) then
+            execute 'create role ' || quote_ident(role_name) || ' with nologin;';
+        end if;
+    end loop;
+end $$;
 
 
 -- task 3
 ALTER TABLE rental ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment ENABLE ROW LEVEL SECURITY;
-
 
 -- Create a policy for the rental table
 
