@@ -1,7 +1,8 @@
 """
 Module for preparing inverted indexes based on uploaded documents
 """
-
+import json
+import re
 import sys
 from argparse import ArgumentParser, ArgumentTypeError, FileType
 from io import TextIOWrapper
@@ -44,11 +45,18 @@ class InvertedIndex:
     """
 
     def __init__(self, words_ids: Dict[str, List[int]]):
-        pass
+        self.words_ids = words_ids
 
     def query(self, words: List[str]) -> List[int]:
         """Return the list of relevant documents for the given query"""
-        pass
+        result = None
+        for word in words:
+            doc_ids = set(self.words_ids.get(word, []))
+            if result is None:
+                result = doc_ids
+            else:
+                result &= doc_ids  # Intersection of doc IDs
+        return sorted(result) if result else []
 
     def dump(self, filepath: str) -> None:
         """
@@ -56,7 +64,8 @@ class InvertedIndex:
         :param filepath: path to file with documents
         :return: None
         """
-        pass
+        with open(filepath, "w", encoding="utf-8") as file:
+            json.dump(self.words_ids, file)
 
     @classmethod
     def load(cls, filepath: str):
@@ -65,7 +74,9 @@ class InvertedIndex:
         :param filepath: path to file with documents
         :return: InvertedIndex
         """
-        pass
+        with open(filepath, "r", encoding="utf-8") as file:
+            words_ids = json.load(file)
+        return cls(words_ids)
 
 
 def load_documents(filepath: str) -> Dict[int, str]:
@@ -74,7 +85,16 @@ def load_documents(filepath: str) -> Dict[int, str]:
     :param filepath: path to file with documents
     :return: Dict[int, str]
     """
-    pass
+    documents = {}
+    with open(filepath, "r", encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+            if not line:
+                continue
+            doc_id, content = line.lower().split("\t", 1)
+            doc_id = int(doc_id)
+            documents[doc_id] = content
+    return documents
 
 
 def build_inverted_index(documents: Dict[int, str]) -> InvertedIndex:
@@ -83,8 +103,16 @@ def build_inverted_index(documents: Dict[int, str]) -> InvertedIndex:
     :param documents: dict with documents
     :return: InvertedIndex class
     """
-    pass
-
+    inverted_index = {}
+    for doc_id, content in documents.items():
+        words = re.split(r"\W+", content)
+        for word in words:
+            if word:  # Ignore empty strings from splitting
+                if word not in inverted_index:
+                    inverted_index[word] = []
+                if doc_id not in inverted_index[word]:
+                    inverted_index[word].append(doc_id)
+    return InvertedIndex(inverted_index)
 
 def callback_build(arguments) -> None:
     """process build runner"""
