@@ -1,0 +1,45 @@
+CREATE TABLE IF NOT EXISTS DIM_DATES (
+    DATE_SURR_ID DATE PRIMARY KEY,  
+    YEAR_NO SMALLINT NOT NULL,
+    QUARTER_NO SMALLINT NOT NULL,
+    MONTH_NO SMALLINT NOT NULL,
+    MONTH_NAME TEXT NOT NULL,  
+    WEEK_NO SMALLINT NOT NULL,
+    DAY_NO SMALLINT NOT NULL,
+    DAY_NAME TEXT NOT NULL,
+    ISWEEKEND BOOLEAN NOT NULL,
+    INSERT_DT DATE NOT NULL DEFAULT CURRENT_DATE,  
+    UPDATE_DT DATE NOT NULL DEFAULT CURRENT_DATE   
+);
+
+
+
+DO $$ 
+DECLARE 
+    start_date DATE := '2023-01-01';
+    end_date DATE := '2027-12-31';
+    date_cursor DATE := start_date;  
+BEGIN 
+    WHILE date_cursor <= end_date LOOP 
+        INSERT INTO DIM_DATES (DATE_SURR_ID, YEAR_NO, QUARTER_NO, MONTH_NO, MONTH_NAME, WEEK_NO, DAY_NO, DAY_NAME, ISWEEKEND, INSERT_DT, UPDATE_DT)
+        VALUES (
+            date_cursor, 
+            EXTRACT(YEAR FROM date_cursor), 
+            EXTRACT(QUARTER FROM date_cursor), 
+            EXTRACT(MONTH FROM date_cursor), 
+            TO_CHAR(date_cursor, 'Month'),  
+            EXTRACT(WEEK FROM date_cursor), 
+            EXTRACT(DAY FROM date_cursor), 
+            TRIM(TO_CHAR(date_cursor, 'Day')), 
+            CASE WHEN EXTRACT(ISODOW FROM date_cursor) IN (6, 7) THEN TRUE ELSE FALSE END,
+            CURRENT_DATE,  
+            CURRENT_DATE  
+        )
+        ON CONFLICT (DATE_SURR_ID) DO UPDATE 
+        SET UPDATE_DT = CURRENT_DATE;  
+        
+        date_cursor := date_cursor + INTERVAL '1 day'; 
+    END LOOP;
+END $$;
+
+/* this script is rerunnable and works correctly*/
