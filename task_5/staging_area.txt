@@ -1,0 +1,9 @@
+purposes of staging area:
+we can store history in staging area, it really can help us with data warehouse building since source systems rarely store data for long time and in staging area we can store them for example 5 years.
+it also significantly decreases the load on source system
+and the last benefit is that there can be some "bad data" in the report that issues with ETL logic or source system and in staging area we can check that and fix that problem.
+
+it is not possible to load data directly into 3nf layer because there can be data quality issues, since 3nf layer requires well-structured, clean and accurate data for normalization and because of that there can be problems if our data is not organized well.
+also to move data into the 3NF layer, it often needs to be transformed to meet specific business rules, such as aggregating data, eliminating redundancies, and ensuring consistency. These transformations require complex logic that cannot be performed efficiently on raw data in the 3NF layer. Instead, these transformations are handled in the staging area.
+
+
