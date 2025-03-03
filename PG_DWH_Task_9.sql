@@ -96,7 +96,8 @@ BEGIN
             'sa_online_sales' AS source_system,
             'src_online_sales' AS source_entity
         FROM sa_online_sales_schema.src_online_sales sos
-        WHERE order_id IS NOT NULL AND sos.year::int = 2023
+        WHERE order_id IS NOT NULL AND
+		TO_DATE(year || '-' || LPAD(month::text, 2, '0') || '-' || LPAD(day::text, 2, '0'), 'YYYY-MM-DD')>'2023-01-01'
         UNION
         SELECT 
             order_id,
@@ -120,7 +121,8 @@ BEGIN
             'sa_offline_sales' AS source_system,
             'src_offline_sales' AS source_entity
         FROM sa_offline_sales_schema.src_offline_sales sos 
-        WHERE order_id IS NOT NULL AND sos.year::int = 2023
+        WHERE order_id IS NOT NULL AND 
+		TO_DATE(year || '-' || LPAD(month::text, 2, '0') || '-' || LPAD(day::text, 2, '0'), 'YYYY-MM-DD')>'2023-01-01'
     ), order_data AS (
         SELECT 
             src9.order_id,
@@ -256,29 +258,66 @@ create table if not exists bl_dm.fct_orders_dd(
 )partition by range(event_date);
 
 
-CREATE TABLE bl_dm.fct_orders_historical PARTITION OF bl_dm.fct_orders_dd
-FOR VALUES FROM (MINVALUE) TO ('2023-01-01');
+CREATE TABLE bl_dm.fct_orders_historical1 (
+    LIKE bl_dm.fct_orders_dd INCLUDING ALL
+);
 
-CREATE TABLE bl_dm.fct_orders_2023_q1 PARTITION OF bl_dm.fct_orders_dd
-FOR VALUES FROM ('2023-01-01') TO ('2023-04-01');
+ALTER TABLE bl_dm.fct_orders_dd
+ATTACH PARTITION bl_dm.fct_orders_historical1
+FOR VALUES FROM (MINVALUE) TO ('2024-10-01');
 
-CREATE TABLE bl_dm.fct_orders_2023_q2 PARTITION OF bl_dm.fct_orders_dd
-FOR VALUES FROM ('2023-04-01') TO ('2023-07-01');
-
-CREATE TABLE bl_dm.fct_orders_2023_q3 PARTITION OF bl_dm.fct_orders_dd
-FOR VALUES FROM ('2023-07-01') TO ('2023-10-01');
-
-CREATE TABLE bl_dm.fct_orders_2023_q4 PARTITION OF bl_dm.fct_orders_dd
-FOR VALUES FROM ('2023-10-01') TO ('2024-01-01');
+select * from bl_dm.fct_orders_historical1
 
 
-select * from bl_dm.fct_orders_2023_q4
+CREATE TABLE bl_dm.fct_orders_2024_10 (
+    LIKE bl_dm.fct_orders_dd INCLUDING ALL
+);
+
+ALTER TABLE bl_dm.fct_orders_dd
+ATTACH PARTITION bl_dm.fct_orders_2024_10 
+FOR VALUES FROM ('2024-10-01') TO ('2024-11-01');
+
+select * from bl_dm.fct_orders_2024_10 
+
+CREATE TABLE bl_dm.fct_orders_2024_11 (
+    LIKE bl_dm.fct_orders_dd INCLUDING ALL
+);
+
+ALTER TABLE bl_dm.fct_orders_dd
+ATTACH PARTITION bl_dm.fct_orders_2024_11
+FOR VALUES FROM ('2024-11-01') TO ('2024-12-01');
+
+select * from bl_dm.fct_orders_2024_11
+
+CREATE TABLE bl_dm.fct_orders_2024_12 (
+    LIKE bl_dm.fct_orders_dd INCLUDING ALL
+);
+
+ALTER TABLE bl_dm.fct_orders_dd
+ATTACH PARTITION bl_dm.fct_orders_2024_12
+FOR VALUES FROM ('2024-12-01') TO ('2025-01-01');
+
+
+select * from bl_dm.fct_orders_2024_12
+CREATE TABLE bl_dm.fct_orders_2025 (
+    LIKE bl_dm.fct_orders_dd INCLUDING ALL
+);
+
+ALTER TABLE bl_dm.fct_orders_dd
+ATTACH PARTITION bl_dm.fct_orders_2025
+FOR VALUES FROM ('2025-01-01') TO ('2025-12-31');
+
+select * from bl_dm.fct_orders_dd fod 
+
+
+
 
 
 create or replace procedure  bl_cl.fct_orders_dd()
 language plpgsql as $$
 declare 
 	rows_affected integer :=0;
+	max_date date;
 begin
 	insert into bl_dm.fct_orders_dd (orders_surr_id,orders_src_id,customer_surr_id,employee_surr_id,store_surr_id,address_surr_id,
 								 product_surr_id,date_id, order_type,order_dt,ship_dt,payment_method,delivery_method,ship_mode,insert_dt,
@@ -340,10 +379,11 @@ create temp table if not exists order_data as(
 			from bl_3nf.ce_orders
 );
 
+select max(event_date) from order_data
+into max_date ;--2024-12-31
 
-
-		
-insert into bl_dm.fct_orders_dd (orders_surr_id,orders_src_id,customer_surr_id,employee_surr_id,store_surr_id,address_surr_id,
+if max_date<'2025-01-01' then		
+	insert into bl_dm.fct_orders_dd (orders_surr_id,orders_src_id,customer_surr_id,employee_surr_id,store_surr_id,address_surr_id,
 								 product_surr_id,date_id, order_type,order_dt,ship_dt,payment_method,delivery_method,ship_mode,insert_dt,
 							      source_system,source_entity,price,quantity,discount,profit_amt,price_without_discount,event_date)
 SELECT 
@@ -378,7 +418,7 @@ left join bl_dm.dim_addresses da on order_data.address_id::varchar=da.address_sr
 left join bl_dm.dim_stores ds on order_data.store_id::varchar=ds.store_src_id
 left join bl_dm.dim_employees_scd des on order_data.employee_id::varchar=des.employee_src_id
 left join bl_dm.dim_products dp on order_data.product_id::varchar=dp.product_src_id
-WHERE dd.year_no=2023
+WHERE dd.date_id BETWEEN (CURRENT_DATE - INTERVAL '6 months') AND CURRENT_DATE
 AND NOT EXISTS (
     SELECT 1
     FROM bl_dm.fct_orders_dd df
@@ -386,7 +426,63 @@ AND NOT EXISTS (
     AND order_data.source_system = df.source_system
     AND order_data.source_entity = df.source_entity
 );
-		
+
+else 
+			alter table bl_dm.fct_orders_dd detach partition bl_dm.fct_orders_2025;
+
+
+		insert into  bl_dm.fct_orders_2023_q2(orders_surr_id,orders_src_id,customer_surr_id,employee_surr_id,store_surr_id,address_surr_id,
+								 product_surr_id,date_id, order_type,order_dt,ship_dt,payment_method,delivery_method,ship_mode,insert_dt,
+							      source_system,source_entity,price,quantity,discount,profit_amt,price_without_discount,event_date)
+SELECT 
+    nextval('bl_dm.fct_orders_sequence'),
+	coalesce(order_data.order_id::varchar,'n,a'),
+	coalesce(dc.customer_surr_id,-1),
+    coalesce(des.employee_surr_id,-1),
+	coalesce(ds.store_surr_id, -1),
+	coalesce(da.address_surr_id,-1),
+	coalesce(dp.product_surr_id,-1),
+	coalesce(dd.date_id,'1-1-1900'::date),
+    order_data.order_type,
+    order_data.order_dt,
+    order_data.ship_dt,
+	order_data.payment_method,
+	order_data.delivery_method,
+	order_data.ship_mode,
+	now(),
+	order_data.source_system,
+	order_data.source_entity,
+	order_data.price,
+	order_data.quantity,
+	order_data.discount,
+	order_data.profit,
+	order_data.profit+order_data.price,
+	order_data.event_date
+FROM order_data
+LEFT JOIN bl_3nf.ce_orders co ON order_data.order_id= co.order_id
+left join bl_dm.dim_dates dd on order_data.event_date=dd.date_id
+left join bl_dm.dim_customers dc  on order_data.customer_id::varchar=dc.customer_src_id
+left join bl_dm.dim_addresses da on order_data.address_id::varchar=da.address_src_id
+left join bl_dm.dim_stores ds on order_data.store_id::varchar=ds.store_src_id
+left join bl_dm.dim_employees_scd des on order_data.employee_id::varchar=des.employee_src_id
+left join bl_dm.dim_products dp on order_data.product_id::varchar=dp.product_src_id
+WHERE dd.date_id BETWEEN (CURRENT_DATE - INTERVAL '6 months') AND CURRENT_DATE
+AND NOT EXISTS (
+    SELECT 1
+    FROM bl_dm.fct_orders_dd df
+    WHERE order_data.order_id::varchar = df.orders_src_id::varchar
+    AND order_data.source_system = df.source_system
+    AND order_data.source_entity = df.source_entity
+);
+
+
+
+
+ALTER TABLE bl_dm.fct_orders_dd
+ATTACH PARTITION bl_dm.fct_orders_2025
+FOR VALUES FROM ('2025-01-01') TO ('2025-12-31');
+
+
 
 			get diagnostics rows_affected:=row_count;
 		
@@ -396,6 +492,7 @@ AND NOT EXISTS (
         'Procedure completed successfully',
         'INFO'
     );
+end if;
 
 	drop table if exists order_data;
 
@@ -417,7 +514,8 @@ $$;
 
 
 call bl_cl.fct_orders_dd();
-select * from bl_dm.fct_orders_dd fod 
+select count(*) from bl_dm.fct_orders_dd fod 
+select * from  
 select * from bl_dm.dim_dates dd 
 select * from bl_cl.logs 
 
